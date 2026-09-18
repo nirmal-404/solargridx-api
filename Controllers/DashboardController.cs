@@ -13,8 +13,12 @@ namespace SolarGridX.Api.Controllers;
 [Authorize]
 public sealed class DashboardController(ReservationService reservations) : ControllerBase
 {
-    // Returns current, pending, approved-future and completed counts calculated from MongoDB.
+    // Returns current, pending, approved-future and completed reservation counts.
+    // Prosumers see counts scoped to their own reservations; staff see system-wide counts.
     [HttpGet("summary")]
+    [ProducesResponseType(typeof(DashboardSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<DashboardSummaryResponse>> Summary(CancellationToken ct)
     {
         var id = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
