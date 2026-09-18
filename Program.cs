@@ -1,5 +1,6 @@
 // Smart Solar Microgrid Trading System - application composition root.
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -22,7 +23,9 @@ if (string.IsNullOrWhiteSpace(jwt.Secret) || jwt.Secret.Length < 32)
     throw new InvalidOperationException("Configure Jwt:Secret with at least 32 characters through user secrets or environment variables.");
 }
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter())
+);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
