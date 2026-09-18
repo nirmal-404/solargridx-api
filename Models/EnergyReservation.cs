@@ -8,6 +8,8 @@ namespace SolarGridX.Api.Models;
 public sealed class EnergyReservation : AuditedDocument
 {
     public string ReservationId { get; set; } = string.Empty;
+    // Compatibility reference retained until reservation workflows are migrated to NIC-only Prosumer management.
+    public string ProsumerUserId { get; set; } = string.Empty;
     public string ProsumerNic { get; set; } = string.Empty;
     public string StationId { get; set; } = string.Empty;
     public string SlotId { get; set; } = string.Empty;

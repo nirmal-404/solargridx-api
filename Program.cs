@@ -12,6 +12,7 @@ DotEnvConfiguration.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<MongoDbOptions>(builder.Configuration.GetSection(MongoDbOptions.SectionName));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+builder.Services.Configure<SeedOptions>(builder.Configuration.GetSection("Seed"));
 
 var jwt =
     builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -109,6 +110,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<StationSlotService>();
 builder.Services.AddScoped<ReservationService>();
+builder.Services.AddScoped<InitialBackofficeSeeder>();
 
 var app = builder.Build();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
@@ -139,7 +141,10 @@ app.MapGet(
 
 using (var scope = app.Services.CreateScope())
 {
-    await scope.ServiceProvider.GetRequiredService<MongoContext>().InitializeIndexesAsync();
+    var services = scope.ServiceProvider;
+    await services.GetRequiredService<MongoContext>().MigrateLegacyProsumerAccountsAsync();
+    await services.GetRequiredService<MongoContext>().InitializeIndexesAsync();
+    await services.GetRequiredService<InitialBackofficeSeeder>().SeedAsync();
 }
 
 app.Run();

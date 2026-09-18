@@ -2,7 +2,7 @@
 
 Central ASP.NET Core 10 REST API for the Smart Solar Microgrid Trading System. Web and native Android clients use this API only; MongoDB is never accessed directly by a client. Services are intentionally "fat": all authorization, ownership checks, capacity checks, reservation transitions, time rules and QR checks happen on the server.
 
-The only assignable staff roles are `Backoffice` and `GridOperator`. A Prosumer is an NIC-keyed customer profile, not a third role: Prosumer accounts carry no staff role claim, and the API checks profile/reservation ownership by authenticated account ID and NIC.
+Every account is a `User` with exactly one role: `Prosumer`, `Backoffice`, or `GridOperator`. Prosumer registration requires an NIC and is assigned the `Prosumer` role by the server. There is no SuperBackoffice role.
 
 ## Architecture
 
@@ -21,12 +21,18 @@ Requires .NET SDK 10.0.300+, MongoDB 8+ and a local HTTPS development certificat
 
 Run `dotnet restore`, `dotnet build`, then `dotnet run --launch-profile https`. Swagger UI is available in Development at `/swagger`; health is `/health`. On startup, the API creates the four required collections on use and their indexes: `users`, `solarStations`, `energyBookingSlots` and `energyReservations`.
 
+## Account bootstrap and permissions
+
+Public `POST /api/auth/register` creates a `Pending` User with the `Prosumer` role and no access until a Backoffice user activates it. No public route can create staff accounts.
+
+To bootstrap an empty deployment, set `Seed__Enabled=true` and provide the `Seed__Email`, `Seed__Password`, `Seed__FirstName`, and `Seed__LastName` values in `.env` or deployment environment variables. Startup creates one active `Backoffice` account only if no Backoffice account exists. It never resets or changes an existing account. Turn the setting off after the initial start. That Backoffice account can use authenticated `POST /api/users` to create both `Backoffice` and `GridOperator` users. Every Backoffice has the same authority; no special or higher-level role exists. Existing roleless Prosumer users are migrated to the `Prosumer` role at startup.
+
 ## Endpoint overview
 
 | Group | Main routes |
 | --- | --- |
 | Authentication | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` |
-| Prosumer and users | `/api/prosumers/{nic}`, `/api/prosumers/pending`, `/api/prosumers/{nic}/reactivate`, `POST /api/users` |
+| Users | `/api/prosumers/{nic}`, `/api/prosumers/pending`, `/api/prosumers/{nic}/reactivate`, `POST /api/users` |
 | Stations and slots | `/api/stations`, `/api/stations/nearby`, `/api/slots`, `/api/stations/{stationId}/slots` |
 | Reservations | `/api/reservations`, `/api/reservations/{id}/approve`, `/cancel`, `/reject`, `/transaction-token` |
 | Transactions | `POST /api/transactions/verify`, `POST /api/transactions/{id}/complete` |
@@ -44,7 +50,7 @@ Publish a Release build to a folder. Install the matching ASP.NET Core 10 Hostin
 
 ## Known limitations and handoff
 
-The QR payload is returned by the owner-only transaction-token route and must be rendered by the mobile client. MongoDB atomic capacity updates protect normal booking conflicts; a replica-set-backed MongoDB transaction is the next enhancement for strict cross-document all-or-nothing reservation moves. Optional development seeding and automated test coverage remain to be completed before production use.
+The QR payload is returned by the owner-only transaction-token route and must be rendered by the mobile client. MongoDB atomic capacity updates protect normal booking conflicts; a replica-set-backed MongoDB transaction is the next enhancement for strict cross-document all-or-nothing reservation moves. Broader automated integration coverage remains to be completed before production use.
 
 This API was generated with AI assistance at the user's explicit request. Record that assistance accurately according to course policy.
 

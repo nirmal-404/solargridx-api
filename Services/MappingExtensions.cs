@@ -18,7 +18,6 @@ public static class MappingExtensions
             value.Phone,
             value.Address,
             value.Role,
-            value.IsProsumer,
             value.AccountStatus
         );
 
