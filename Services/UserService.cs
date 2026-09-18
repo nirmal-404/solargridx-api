@@ -40,8 +40,8 @@ public sealed class UserService(
         return user.ToResponse();
     }
 
-    // Authenticates an active account and returns a minimal JWT response.
-    public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct)
+    // Authenticates an active account, issues an access token and persistent refresh token.
+    public async Task<LoginResponse> LoginAsync(LoginRequest request, string? ipAddress = null, CancellationToken ct = default)
     {
         var user = await db
             .Users.Find(x => x.Email == NormalizeEmail(request.Email))
@@ -50,9 +50,103 @@ public sealed class UserService(
             throw new ApiException(401, "Invalid email or password.");
         if (user.AccountStatus != AccountStatus.Active)
             throw new ApiException(403, "This account is not active.");
+
         var token = tokens.Create(user);
+        var refreshToken = await tokens.IssueRefreshTokenAsync(user.Id, ipAddress, ct);
+
+        user.LastLoginAt = DateTime.UtcNow;
+        await db.Users.UpdateOneAsync(
+            x => x.Id == user.Id,
+            Builders<User>.Update.Set(x => x.LastLoginAt, user.LastLoginAt),
+            cancellationToken: ct
+        );
+
         logger.LogInformation("Login succeeded for user {UserId}", user.Id);
-        return new LoginResponse(token.Token, token.ExpiresAt, user.ToResponse());
+        return new LoginResponse(token.Token, token.ExpiresAt, user.ToResponse(), refreshToken.Token, refreshToken.ExpiresAt);
+    }
+
+    // Processes external OAuth 2.0 (e.g. Google) user login or auto-provisioning.
+    public async Task<LoginResponse> LoginWithOAuthAsync(
+        OAuthUserInfo oauthInfo,
+        string? ipAddress = null,
+        GoogleOAuthRequest? extraData = null,
+        CancellationToken ct = default
+    )
+    {
+        var email = NormalizeEmail(oauthInfo.Email);
+        var user = await db.Users.Find(x =>
+            (x.OAuthProvider == "Google" && x.OAuthSubjectId == oauthInfo.SubjectId) ||
+            x.Email == email
+        ).FirstOrDefaultAsync(ct);
+
+        if (user is not null)
+        {
+            if (string.IsNullOrWhiteSpace(user.OAuthSubjectId))
+            {
+                user.OAuthProvider = "Google";
+                user.OAuthSubjectId = oauthInfo.SubjectId;
+                user.UpdatedAt = DateTime.UtcNow;
+            }
+
+            if (user.AccountStatus != AccountStatus.Active)
+                throw new ApiException(403, "This account is not active or is pending approval.");
+
+            user.LastLoginAt = DateTime.UtcNow;
+            await db.Users.ReplaceOneAsync(x => x.Id == user.Id, user, cancellationToken: ct);
+        }
+        else
+        {
+            // Auto-provision new active Prosumer from verified OAuth identity
+            var nic = !string.IsNullOrWhiteSpace(extraData?.Nic)
+                ? NormalizeNic(extraData.Nic)
+                : $"GOOG-{oauthInfo.SubjectId[..Math.Min(8, oauthInfo.SubjectId.Length)].ToUpperInvariant()}";
+
+            if (await db.Users.Find(x => x.Nic == nic).AnyAsync(ct))
+            {
+                nic = $"GOOG-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+            }
+
+            user = new User
+            {
+                Email = email,
+                FirstName = string.IsNullOrWhiteSpace(oauthInfo.FirstName) ? "Google" : oauthInfo.FirstName.Trim(),
+                LastName = string.IsNullOrWhiteSpace(oauthInfo.LastName) ? "User" : oauthInfo.LastName.Trim(),
+                Nic = nic,
+                Phone = extraData?.Phone?.Trim(),
+                Address = extraData?.Address?.Trim(),
+                PasswordHash = passwords.Hash(Guid.NewGuid().ToString("N")),
+                IsProsumer = true,
+                AccountStatus = AccountStatus.Active,
+                OAuthProvider = "Google",
+                OAuthSubjectId = oauthInfo.SubjectId,
+                LastLoginAt = DateTime.UtcNow,
+            };
+
+            await db.Users.InsertOneAsync(user, cancellationToken: ct);
+            logger.LogInformation("New prosumer registered via Google OAuth 2.0 with NIC {Nic}", nic);
+        }
+
+        var token = tokens.Create(user);
+        var refreshToken = await tokens.IssueRefreshTokenAsync(user.Id, ipAddress, ct);
+        return new LoginResponse(token.Token, token.ExpiresAt, user.ToResponse(), refreshToken.Token, refreshToken.ExpiresAt);
+    }
+
+    // Allows authenticated user to change their password securely and revokes other sessions.
+    public async Task ChangePasswordAsync(string userId, ChangePasswordRequest request, CancellationToken ct)
+    {
+        var user = await FindByIdAsync(userId, ct);
+        if (!passwords.Verify(request.CurrentPassword, user.PasswordHash))
+        {
+            throw new ApiException(400, "The current password supplied is incorrect.");
+        }
+
+        user.PasswordHash = passwords.Hash(request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+        await db.Users.ReplaceOneAsync(x => x.Id == user.Id, user, cancellationToken: ct);
+
+        // Invalidate previous sessions
+        await tokens.RevokeAllUserTokensAsync(user.Id, ct);
+        logger.LogInformation("Password updated and sessions revoked for user {UserId}", user.Id);
     }
 
     // Finds the current authenticated account from the JWT subject.

@@ -8,24 +8,24 @@ The only assignable staff roles are `Backoffice` and `GridOperator`. A Prosumer 
 
 React web / native Kotlin Android -> HTTPS REST API hosted in IIS -> MongoDB.
 
-- `Controllers`: HTTP, authorization and responses only.
-- `Services`: authoritative workflows and business rules.
-- `Domain`: MongoDB entities and strongly typed role/status enums.
-- `Infrastructure`: MongoDB collections and startup indexes.
-- `DTOs`: request and response contracts; password hashes and QR token hashes are never returned.
-- `Middleware`: consistent safe API errors.
+- `Controllers`: HTTP, authorization, OAuth 2.0 and responses.
+- `Services`: authoritative workflows, OAuth token validation, password hashing, and business rules.
+- `Domain`: MongoDB entities, refresh tokens, and strongly typed role/status enums.
+- `Infrastructure`: MongoDB collections, indexes, and automatic TTL indexes.
+- `DTOs`: request and response contracts; password hashes and raw QR tokens are never returned.
+- `Middleware`: consistent safe API errors, OWASP security headers, audit logging, and real-time account status validation.
 
 ## Prerequisites and local setup
 
-Requires .NET SDK 10.0.300+, MongoDB 8+ and a local HTTPS development certificate for HTTPS use. `appsettings.json` has a local MongoDB example but deliberately contains no JWT secret. Copy `.env.example` to `.env`, then set `Jwt__Secret` to a random value of at least 32 characters. The API loads `.env` before startup; the file is ignored by Git. Environment variables set by the operating system or deployment host take precedence over `.env`.
+Requires .NET SDK 10.0.300+, MongoDB 8+ and a local HTTPS development certificate for HTTPS use. `appsettings.json` has a local MongoDB example but deliberately contains no JWT secret. Copy `.env.example` to `.env`, then set `Jwt__Secret` to a random value of at least 32 characters, and configure optional `OAuth__Google` credentials. The API loads `.env` before startup; the file is ignored by Git. Environment variables set by the operating system or deployment host take precedence over `.env`.
 
-Run `dotnet restore`, `dotnet build`, then `dotnet run --launch-profile https`. Swagger UI is available in Development at `/swagger`; health is `/health`. On startup, the API creates the four required collections on use and their indexes: `users`, `solarStations`, `energyBookingSlots` and `energyReservations`.
+Run `dotnet restore`, `dotnet build`, then `dotnet run --launch-profile https`. Swagger UI is available in Development at `/swagger`; health is `/health`. On startup, the API creates the collections on use and their indexes: `users`, `refreshTokens`, `solarStations`, `energyBookingSlots` and `energyReservations`.
 
 ## Endpoint overview
 
 | Group | Main routes |
 | --- | --- |
-| Authentication | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` |
+| Authentication & OAuth 2.0 | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/oauth/token`, `POST /api/auth/oauth/google`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `POST /api/auth/change-password`, `GET /api/auth/me` |
 | Prosumer and users | `/api/prosumers/{nic}`, `/api/prosumers/pending`, `/api/prosumers/{nic}/reactivate`, `POST /api/users` |
 | Stations and slots | `/api/stations`, `/api/stations/nearby`, `/api/slots`, `/api/stations/{stationId}/slots` |
 | Reservations | `/api/reservations`, `/api/reservations/{id}/approve`, `/cancel`, `/reject`, `/transaction-token` |

@@ -14,6 +14,7 @@ public sealed class MongoContext
     public IMongoCollection<SolarStation> Stations => Database.GetCollection<SolarStation>("solarStations");
     public IMongoCollection<EnergyBookingSlot> Slots => Database.GetCollection<EnergyBookingSlot>("energyBookingSlots");
     public IMongoCollection<EnergyReservation> Reservations => Database.GetCollection<EnergyReservation>("energyReservations");
+    public IMongoCollection<RefreshToken> RefreshTokens => Database.GetCollection<RefreshToken>("refreshTokens");
 
     // Creates the database handle from configured server-only connection settings.
     public MongoContext(IOptions<MongoDbOptions> options)
@@ -43,5 +44,9 @@ public sealed class MongoContext
             new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(x => x.StationId).Ascending(x => x.Status).Ascending(x => x.ScheduledStartTime)),
             new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(x => x.SlotId).Ascending(x => x.Status)),
             new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending("Transaction.TransactionId"), new CreateIndexOptions { Unique = true, Sparse = true })], cancellationToken);
+        await RefreshTokens.Indexes.CreateManyAsync([
+            new CreateIndexModel<RefreshToken>(Builders<RefreshToken>.IndexKeys.Ascending(x => x.Token), new CreateIndexOptions { Unique = true, Name = "ux_refreshtokens_token" }),
+            new CreateIndexModel<RefreshToken>(Builders<RefreshToken>.IndexKeys.Ascending(x => x.UserId), new CreateIndexOptions { Name = "ix_refreshtokens_userid" }),
+            new CreateIndexModel<RefreshToken>(Builders<RefreshToken>.IndexKeys.Ascending(x => x.ExpiresAt), new CreateIndexOptions { ExpireAfter = TimeSpan.Zero, Name = "ttl_refreshtokens_expiresat" })], cancellationToken);
     }
 }

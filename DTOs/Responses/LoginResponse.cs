@@ -4,4 +4,6 @@ namespace SolarGridX.Api.DTOs.Responses;
 public sealed record LoginResponse(
     string AccessToken,
     DateTime ExpiresAtUtc,
-    UserResponse User);
+    UserResponse User,
+    string? RefreshToken = null,
+    DateTime? RefreshTokenExpiresAtUtc = null);

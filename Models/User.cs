@@ -17,4 +17,7 @@ public sealed class User : AuditedDocument
     [BsonRepresentation(BsonType.String)] public UserRole? Role { get; set; }
     public bool IsProsumer { get; set; }
     [BsonRepresentation(BsonType.String)] public AccountStatus AccountStatus { get; set; } = AccountStatus.Pending;
+    public string? OAuthProvider { get; set; }
+    public string? OAuthSubjectId { get; set; }
+    public DateTime? LastLoginAt { get; set; }
 }

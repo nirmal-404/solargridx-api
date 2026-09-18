@@ -12,6 +12,7 @@ DotEnvConfiguration.Load();
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<MongoDbOptions>(builder.Configuration.GetSection(MongoDbOptions.SectionName));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+builder.Services.Configure<OAuthOptions>(builder.Configuration.GetSection(OAuthOptions.SectionName));
 
 var jwt =
     builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -31,6 +32,7 @@ builder.Services.AddSwaggerGen(options =>
         {
             Title = "SolarGridX API",
             Version = "v1",
+            Description = "Smart Solar Microgrid Trading System API with Open Authorization 2.0 (OAuth 2.0) and JWT Bearer Security."
         }
     );
     options.AddSecurityDefinition(
@@ -42,9 +44,32 @@ builder.Services.AddSwaggerGen(options =>
             Scheme = "bearer",
             BearerFormat = "JWT",
             In = ParameterLocation.Header,
+            Description = "Enter JWT access token issued by /api/auth/login or /api/auth/oauth/token."
+        }
+    );
+    options.AddSecurityDefinition(
+        "OAuth2",
+        new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.OAuth2,
+            Description = "Standard RFC 6749 Open Authorization 2.0 password flow.",
+            Flows = new OpenApiOAuthFlows
+            {
+                Password = new OpenApiOAuthFlow
+                {
+                    TokenUrl = new Uri("/api/auth/oauth/token", UriKind.Relative),
+                    Scopes = new Dictionary<string, string>
+                    {
+                        { "openid", "OpenID identity" },
+                        { "profile", "User profile and role" },
+                        { "email", "User email" }
+                    }
+                }
+            }
         }
     );
 });
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -89,6 +114,7 @@ builder.Services
             },
         };
     });
+
 builder.Services.AddAuthorization();
 builder.Services.AddCors(options =>
 {
@@ -103,26 +129,35 @@ builder.Services.AddCors(options =>
                 .AllowAnyMethod()
     );
 });
+
 builder.Services.AddSingleton<MongoContext>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IOAuthService, OAuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<StationSlotService>();
 builder.Services.AddScoped<ReservationService>();
 
 var app = builder.Build();
+
+// Security and operational middleware pipeline
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 app.UseHttpsRedirection();
 app.UseCors("WebClient");
 app.UseAuthentication();
+app.UseMiddleware<AccountStatusValidationMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
+
 app.MapGet(
         "/health",
         async (MongoContext db, CancellationToken ct) =>
