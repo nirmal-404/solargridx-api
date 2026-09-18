@@ -1,0 +1,26 @@
+// Smart Solar Microgrid Trading System - Backoffice Prosumer creation request.
+using System.ComponentModel.DataAnnotations;
+
+namespace SolarGridX.Api.DTOs.Requests;
+
+public sealed class CreateProsumerRequest
+{
+    [Required]
+    public string Nic { get; init; } = string.Empty;
+
+    [Required]
+    [StringLength(100)]
+    public string FirstName { get; init; } = string.Empty;
+
+    [Required]
+    [StringLength(100)]
+    public string LastName { get; init; } = string.Empty;
+
+    [Required]
+    [EmailAddress]
+    public string Email { get; init; } = string.Empty;
+
+    public string? Phone { get; init; }
+
+    public string? Address { get; init; }
+}
