@@ -15,4 +15,5 @@ public sealed record ReservationResponse(
     DateTime? TransactionExpiresAt,
     DateTime? ApprovedAt,
     DateTime? CancelledAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    string? ProsumerNic = null);

@@ -64,6 +64,7 @@ public static class MappingExtensions
             value.Transaction?.ExpiresAt,
             value.ApprovedAt,
             value.CancelledAt,
-            value.CompletedAt
+            value.CompletedAt,
+            value.ProsumerNic
         );
 }

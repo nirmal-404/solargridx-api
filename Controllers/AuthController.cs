@@ -12,25 +12,33 @@ namespace SolarGridX.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(UserService users) : ControllerBase
 {
-    // Registers a new Pending Prosumer account using its NIC business identifier.
+    // Registers a new Prosumer account in Pending state using a NIC as the business identifier.
+    // Backoffice must activate the account before the Prosumer can create reservations.
     [HttpPost("register")]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)
     {
         var user = await users.RegisterAsync(request, ct);
         return CreatedAtAction(nameof(Me), new { }, user);
     }
 
-    // Authenticates an active account and issues an access token.
+    // Authenticates an active account and issues a signed JWT access token.
     [HttpPost("login")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken ct)
     {
         return Ok(await users.LoginAsync(request, ct));
     }
 
-    // Returns the current account without exposing password or token internals.
+    // Returns the current account's public profile without exposing password hash or token internals.
     [Authorize]
     [HttpGet("me")]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<UserResponse>> Me(CancellationToken ct)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
