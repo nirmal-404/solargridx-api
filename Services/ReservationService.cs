@@ -8,6 +8,7 @@ using SolarGridX.Api.DTOs.Responses;
 using SolarGridX.Api.Infrastructure;
 using SolarGridX.Api.Models;
 using SolarGridX.Api.Models.Enums;
+using SolarGridX.Api.Utilities;
 
 namespace SolarGridX.Api.Services;
 
@@ -114,7 +115,15 @@ public sealed class ReservationService(
     {
         var filter = Builders<EnergyReservation>.Filter.Empty;
         if (role == UserRole.Prosumer)
+        {
+            if (!string.IsNullOrWhiteSpace(nic))
+            {
+                var prosumer = await users.FindByIdAsync(callerId, ct);
+                if (!string.Equals(prosumer.Nic, nic.Trim(), StringComparison.OrdinalIgnoreCase))
+                    throw new ApiException(403, "You may only access your own reservations.");
+            }
             filter &= Builders<EnergyReservation>.Filter.Eq(x => x.ProsumerUserId, callerId);
+        }
         else if (!string.IsNullOrWhiteSpace(nic))
             filter &= Builders<EnergyReservation>.Filter.Eq(
                 x => x.ProsumerNic,
@@ -183,14 +192,56 @@ public sealed class ReservationService(
         EnsureAccess(reservation, callerId, role);
         EnsureModifiable(reservation);
         var station = await stations.FindStationAsync(request.StationId, ct);
+        if (station.Status != StationStatus.Active)
+            throw new ApiException(409, "Station is not active.");
         var nextSlot = await stations.FindSlotAsync(request.SlotId, ct);
         ValidateBookingTarget(station, nextSlot, request.RequestedCapacity);
         ValidateSevenDayWindow(nextSlot.StartTime);
-        if (
-            reservation.SlotId == nextSlot.SlotId
-            && reservation.RequestedCapacity == request.RequestedCapacity
-        )
+
+        if (reservation.SlotId == nextSlot.SlotId)
+        {
+            if (reservation.RequestedCapacity == request.RequestedCapacity)
+                return reservation.ToResponse();
+
+            var delta = request.RequestedCapacity - reservation.RequestedCapacity;
+            if (delta > 0)
+            {
+                var capacityFilter =
+                    Builders<EnergyBookingSlot>.Filter.Eq(x => x.Id, nextSlot.Id)
+                    & Builders<EnergyBookingSlot>.Filter.Eq(x => x.Status, SlotStatus.Active)
+                    & Builders<EnergyBookingSlot>.Filter.Gte(x => x.AvailableCapacity, delta);
+
+                var update = Builders<EnergyBookingSlot>
+                    .Update.Inc(x => x.AvailableCapacity, -delta)
+                    .Set(x => x.UpdatedAt, DateTime.UtcNow);
+
+                if (
+                    (
+                        await db.Slots.UpdateOneAsync(
+                            capacityFilter,
+                            update,
+                            cancellationToken: ct
+                        )
+                    ).ModifiedCount != 1
+                )
+                    throw new ApiException(409, "Requested capacity is no longer available.");
+            }
+            else
+            {
+                await ReleaseCapacityAsync(nextSlot.Id, -delta, ct);
+            }
+
+            reservation.StationId = station.StationId;
+            reservation.RequestedCapacity = request.RequestedCapacity;
+            reservation.UpdatedAt = DateTime.UtcNow;
+            await db.Reservations.ReplaceOneAsync(
+                x => x.Id == reservation.Id && x.Status == reservation.Status,
+                reservation,
+                cancellationToken: ct
+            );
             return reservation.ToResponse();
+        }
+
         var reserveFilter =
             Builders<EnergyBookingSlot>.Filter.Eq(x => x.Id, nextSlot.Id)
             & Builders<EnergyBookingSlot>.Filter.Eq(x => x.Status, SlotStatus.Active)
@@ -222,6 +273,10 @@ public sealed class ReservationService(
             reservation.ScheduledStartTime = nextSlot.StartTime;
             reservation.ScheduledEndTime = nextSlot.EndTime;
             reservation.RequestedCapacity = request.RequestedCapacity;
+            if (reservation.Transaction != null)
+            {
+                reservation.Transaction.ExpiresAt = nextSlot.EndTime.AddHours(1);
+            }
             reservation.UpdatedAt = DateTime.UtcNow;
             await db.Reservations.ReplaceOneAsync(
                 x => x.Id == reservation.Id && x.Status == reservation.Status,
@@ -508,7 +563,7 @@ public sealed class ReservationService(
     }
 
     // Enforces the twelve-hour modification notice and valid editable state.
-    private static void EnsureModifiable(EnergyReservation reservation)
+    internal static void EnsureModifiable(EnergyReservation reservation)
     {
         if (!ActiveStatuses.Contains(reservation.Status))
             throw new ApiException(409, "Reservation cannot be updated in its current state.");
@@ -517,7 +572,7 @@ public sealed class ReservationService(
     }
 
     // Enforces the twelve-hour cancellation notice and valid cancellable state.
-    private static void EnsureCancellable(EnergyReservation reservation)
+    internal static void EnsureCancellable(EnergyReservation reservation)
     {
         if (!ActiveStatuses.Contains(reservation.Status))
             throw new ApiException(409, "Reservation cannot be cancelled in its current state.");
@@ -526,7 +581,7 @@ public sealed class ReservationService(
     }
 
     // Enforces the mandatory future and seven-day reservation horizon using UTC server time.
-    private static void ValidateSevenDayWindow(DateTime start)
+    internal static void ValidateSevenDayWindow(DateTime start)
     {
         start = ToUtc(start);
         var now = DateTime.UtcNow;
@@ -537,7 +592,7 @@ public sealed class ReservationService(
     }
 
     // Verifies consistent station/slot association and a positive requested capacity.
-    private static void ValidateBookingTarget(
+    internal static void ValidateBookingTarget(
         SolarStation station,
         EnergyBookingSlot slot,
         decimal requested
@@ -562,10 +617,10 @@ public sealed class ReservationService(
         );
 
     // Hashes opaque QR tokens before persistence so raw tokens cannot be replayed from the database.
-    private static string HashToken(string token) =>
+    internal static string HashToken(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     // Normalizes date inputs to UTC before applying server-side business time calculations.
     private static DateTime ToUtc(DateTime value) =>
-        value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+        TimeHelper.ToUtc(value);
 }

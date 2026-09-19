@@ -7,7 +7,7 @@ namespace SolarGridX.Api.Models;
 
 public sealed class User : AuditedDocument
 {
-    public string? Nic { get; set; }
+    [BsonIgnoreIfNull] public string? Nic { get; set; }
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;

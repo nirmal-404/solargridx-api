@@ -48,6 +48,7 @@ builder.Services.AddSwaggerGen(options =>
             In = ParameterLocation.Header,
         }
     );
+    // The Authorize button in Swagger UI allows entering the JWT Bearer token once for all requests.
 });
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
