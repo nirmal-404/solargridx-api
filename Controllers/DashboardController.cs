@@ -18,9 +18,8 @@ public sealed class DashboardController(ReservationService reservations) : Contr
     public async Task<ActionResult<DashboardSummaryResponse>> Summary(CancellationToken ct)
     {
         var id = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-        UserRole? role = Enum.TryParse<UserRole>(User.FindFirstValue(ClaimTypes.Role), out var parsed)
-           ? parsed
-           : null;
+        if (!Enum.TryParse<UserRole>(User.FindFirstValue(ClaimTypes.Role), out var role))
+            return Forbid();
         var summary = await reservations.SummaryAsync(id, role, ct);
 
         return Ok(summary);

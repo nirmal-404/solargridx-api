@@ -32,7 +32,7 @@ public sealed class ReservationService(
     )
     {
         var prosumer = await users.FindByIdAsync(callerId, ct);
-        if (!prosumer.IsProsumer || prosumer.AccountStatus != AccountStatus.Active)
+        if (prosumer.Role != UserRole.Prosumer || prosumer.AccountStatus != AccountStatus.Active)
             throw new ApiException(403, "Only active Prosumer profiles may create reservations.");
 
         var station = await stations.FindStationAsync(request.StationId, ct);
@@ -90,7 +90,7 @@ public sealed class ReservationService(
     public async Task<ReservationResponse> GetAsync(
         string reservationId,
         string callerId,
-        UserRole? role,
+        UserRole role,
         CancellationToken ct
     )
     {
@@ -102,7 +102,7 @@ public sealed class ReservationService(
     // Lists role-scoped reservations with optional authorized filters and status grouping.
     public async Task<List<ReservationResponse>> ListAsync(
         string callerId,
-        UserRole? role,
+        UserRole role,
         string? group,
         ReservationStatus? status,
         string? stationId,
@@ -113,7 +113,7 @@ public sealed class ReservationService(
     )
     {
         var filter = Builders<EnergyReservation>.Filter.Empty;
-        if (!role.HasValue)
+        if (role == UserRole.Prosumer)
             filter &= Builders<EnergyReservation>.Filter.Eq(x => x.ProsumerUserId, callerId);
         else if (!string.IsNullOrWhiteSpace(nic))
             filter &= Builders<EnergyReservation>.Filter.Eq(
@@ -174,7 +174,7 @@ public sealed class ReservationService(
     public async Task<ReservationResponse> UpdateAsync(
         string reservationId,
         string callerId,
-        UserRole? role,
+        UserRole role,
         UpdateReservationRequest request,
         CancellationToken ct
     )
@@ -241,7 +241,7 @@ public sealed class ReservationService(
     public async Task CancelAsync(
         string reservationId,
         string callerId,
-        UserRole? role,
+        UserRole role,
         CancellationToken ct
     )
     {
@@ -316,7 +316,7 @@ public sealed class ReservationService(
     )
     {
         var reservation = await FindAsync(reservationId, ct);
-        EnsureAccess(reservation, callerId, null);
+        EnsureAccess(reservation, callerId, UserRole.Prosumer);
         if (
             reservation.Status != ReservationStatus.Approved
             || reservation.Transaction is null
@@ -461,11 +461,11 @@ public sealed class ReservationService(
     // Calculates role-scoped dashboard counts from live MongoDB reservation data.
     public async Task<DashboardSummaryResponse> SummaryAsync(
         string callerId,
-        UserRole? role,
+        UserRole role,
         CancellationToken ct
     )
     {
-        var baseFilter = !role.HasValue
+        var baseFilter = role == UserRole.Prosumer
             ? Builders<EnergyReservation>.Filter.Eq(x => x.ProsumerUserId, callerId)
             : Builders<EnergyReservation>.Filter.Empty;
         async Task<int> Count(FilterDefinition<EnergyReservation> extra) =>
@@ -501,9 +501,9 @@ public sealed class ReservationService(
         ?? throw new ApiException(404, "Reservation was not found.");
 
     // Enforces Prosumer ownership while staff roles retain operational access.
-    private static void EnsureAccess(EnergyReservation reservation, string callerId, UserRole? role)
+    private static void EnsureAccess(EnergyReservation reservation, string callerId, UserRole role)
     {
-        if (!role.HasValue && reservation.ProsumerUserId != callerId)
+        if (role == UserRole.Prosumer && reservation.ProsumerUserId != callerId)
             throw new ApiException(403, "You may only access your own reservations.");
     }
 

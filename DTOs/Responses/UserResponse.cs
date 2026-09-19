@@ -10,6 +10,5 @@ public sealed record UserResponse(
     string LastName,
     string? Phone,
     string? Address,
-    UserRole? Role,
-    bool IsProsumer,
+    UserRole Role,
     AccountStatus AccountStatus);

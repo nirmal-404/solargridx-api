@@ -1,4 +1,4 @@
-// Smart Solar Microgrid Trading System - authentication and prosumer/user workflows.
+// Smart Solar Microgrid Trading System - authentication and user workflows.
 using Microsoft.AspNetCore.Identity;
 using MongoDB.Driver;
 using SolarGridX.Api.Common;
@@ -17,7 +17,7 @@ public sealed class UserService(
     ILogger<UserService> logger
 )
 {
-    // Registers a Prosumer in pending state so Backoffice can manage activation.
+    // Registers a Prosumer user in pending state so Backoffice can manage activation.
     public async Task<UserResponse> RegisterAsync(RegisterRequest request, CancellationToken ct)
     {
         var nic = NormalizeNic(request.Nic);
@@ -32,7 +32,7 @@ public sealed class UserService(
             Phone = request.Phone?.Trim(),
             Address = request.Address?.Trim(),
             PasswordHash = passwords.Hash(request.Password),
-            IsProsumer = true,
+            Role = UserRole.Prosumer,
             AccountStatus = AccountStatus.Pending,
         };
         await db.Users.InsertOneAsync(user, cancellationToken: ct);
@@ -123,7 +123,7 @@ public sealed class UserService(
     public Task<List<UserResponse>> GetPendingAsync(CancellationToken ct) =>
         db
             .Users.Find(x =>
-                x.IsProsumer
+                x.Role == UserRole.Prosumer
                 && (
                     x.AccountStatus == AccountStatus.Pending
                     || x.AccountStatus == AccountStatus.DeactivationRequested
@@ -138,6 +138,8 @@ public sealed class UserService(
         CancellationToken ct
     )
     {
+        if (request.Role == UserRole.Prosumer)
+            throw new ApiException(422, "Prosumer accounts must be created through registration.");
         var email = NormalizeEmail(request.Email);
         await EnsureAvailableAsync(null, email, ct);
         var user = new User
@@ -160,7 +162,7 @@ public sealed class UserService(
 
     // Retrieves a Prosumer by NIC after normalizing the business identifier.
     public async Task<User> FindProsumerByNicAsync(string nic, CancellationToken ct) =>
-        await db.Users.Find(x => x.Nic == NormalizeNic(nic) && x.IsProsumer).FirstOrDefaultAsync(ct)
+        await db.Users.Find(x => x.Nic == NormalizeNic(nic) && x.Role == UserRole.Prosumer).FirstOrDefaultAsync(ct)
         ?? throw new ApiException(404, "Prosumer was not found.");
 
     // Avoids duplicate business identifiers before insertion while database unique indexes remain authoritative.

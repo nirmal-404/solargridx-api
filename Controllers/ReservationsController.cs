@@ -129,14 +129,14 @@ public sealed class ReservationsController(ReservationService reservations) : Co
         }
     }
 
-    // Resolves the optional staff role; a null role identifies an NIC-keyed Prosumer profile.
-    private UserRole? CurrentRole
+    // Resolves the required role assigned to every authenticated user.
+    private UserRole CurrentRole
     {
         get
         {
             return Enum.TryParse<UserRole>(User.FindFirstValue(ClaimTypes.Role), out var role)
                 ? role
-                : null;
+                : throw new InvalidOperationException("Authenticated user is missing a valid role.");
         }
     }
 }

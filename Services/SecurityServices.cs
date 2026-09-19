@@ -52,7 +52,7 @@ public sealed class PasswordService : IPasswordService
 
 public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
 {
-    // Issues a short-lived JWT containing identity, optional staff role and NIC-based Prosumer identity.
+    // Issues a short-lived JWT containing identity, role and NIC when present.
     public (string Token, DateTime ExpiresAt) Create(User user)
     {
         var value = options.Value;
@@ -66,10 +66,7 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
             new(JwtRegisteredClaimNames.Sub, user.Id),
             new(ClaimTypes.NameIdentifier, user.Id),
         };
-        if (user.Role.HasValue)
-            claims.Add(new Claim(ClaimTypes.Role, user.Role.Value.ToString()));
-        if (user.IsProsumer)
-            claims.Add(new Claim("account_kind", "prosumer"));
+        claims.Add(new Claim(ClaimTypes.Role, user.Role.ToString()));
         if (!string.IsNullOrWhiteSpace(user.Nic))
             claims.Add(new Claim("nic", user.Nic));
         var token = new JwtSecurityToken(

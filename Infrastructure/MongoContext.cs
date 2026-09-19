@@ -1,5 +1,6 @@
 // Smart Solar Microgrid Trading System - MongoDB collections and index initialization.
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using SolarGridX.Api.Configuration;
 using SolarGridX.Api.Models;
@@ -43,5 +44,20 @@ public sealed class MongoContext
             new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(x => x.StationId).Ascending(x => x.Status).Ascending(x => x.ScheduledStartTime)),
             new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending(x => x.SlotId).Ascending(x => x.Status)),
             new CreateIndexModel<EnergyReservation>(Builders<EnergyReservation>.IndexKeys.Ascending("Transaction.TransactionId"), new CreateIndexOptions { Unique = true, Sparse = true })], cancellationToken);
+    }
+
+    // Migrates accounts created before Prosumer became a first-class user role.
+    public async Task MigrateLegacyProsumerAccountsAsync(CancellationToken cancellationToken = default)
+    {
+        var legacyProsumer = Builders<User>.Filter.Eq("IsProsumer", true)
+            & (Builders<User>.Filter.Exists("Role", false)
+                | Builders<User>.Filter.Eq("Role", BsonNull.Value));
+        await Users.UpdateManyAsync(
+            legacyProsumer,
+            Builders<User>.Update
+                .Set(x => x.Role, UserRole.Prosumer)
+                .Unset("IsProsumer"),
+            cancellationToken: cancellationToken
+        );
     }
 }

@@ -1,9 +1,10 @@
 // Smart Solar Microgrid Trading System - staff role definition.
 namespace SolarGridX.Api.Models.Enums;
 
-// Only staff users receive an assignable role. A Prosumer is an NIC-keyed profile, not a role.
+// Every account has exactly one role.
 public enum UserRole
 {
+    Prosumer,
     Backoffice,
     GridOperator
 }

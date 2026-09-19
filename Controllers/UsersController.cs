@@ -13,7 +13,7 @@ namespace SolarGridX.Api.Controllers;
 [Authorize(Roles = nameof(UserRole.Backoffice))]
 public sealed class UsersController(UserService users) : ControllerBase
 {
-    // Creates an active Backoffice or Grid Operator account; Prosumer creation is intentionally excluded.
+    // Creates an active Backoffice or Grid Operator account; Prosumer users register publicly.
     [HttpPost]
     public async Task<ActionResult<UserResponse>> Create(
         CreateUserRequest request,
